@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Sentinel · Server Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>if (window.tailwind) tailwind.config = {corePlugins: {preflight: false}};</script>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#020617;color:#cbd5e1}
+    *{box-sizing:border-box}body{margin:0}button,input,textarea{font:inherit}button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+    .shell{max-width:1440px;margin:auto;display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+    aside{border-right:1px solid #1e293b;padding:32px 24px;background:#070e20}
+    .brand{font-size:21px;font-weight:750;color:#f8fafc;letter-spacing:-.7px}.brand span{color:#34d399}
+    .eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#64748b}
+    .navitem{margin-top:26px;background:#14283a;border:1px solid #254250;border-radius:9px;padding:13px;color:#6ee7b7;font-size:13px}
+    .side-note{margin-top:38px;font-size:12px;line-height:1.9;color:#94a3b8}.side-note b{color:#cbd5e1;font-weight:500}
+    .main{min-width:0;display:flex;flex-direction:column;height:100vh}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:22px 32px;border-bottom:1px solid #1e293b}
+    .auth{display:flex;gap:8px;align-items:center}.auth input{width:210px;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:8px 11px;font-size:12px}
+    button{border:1px solid #334155;border-radius:7px;background:#1e293b;color:#e2e8f0;padding:8px 13px;font-size:12px}
+    .status{display:flex;align-items:center;gap:7px;font-size:11px;color:#94a3b8}.dot{width:6px;height:6px;border-radius:50%;background:#fb7185}.online .dot{background:#34d399;box-shadow:0 0 0 4px #34d39915;animation:pulse 2s infinite}
+    @keyframes pulse{50%{box-shadow:0 0 0 7px #34d39905}}
+    .intro{padding:30px 36px 20px}h1{margin:8px 0;color:#f1f5f9;font-size:27px;letter-spacing:-.7px;font-weight:650}.subtitle{font-size:13px;color:#94a3b8;margin:0}
+    .metrics{display:flex;gap:9px;flex-wrap:wrap;margin-top:22px}.metric{font-size:11px;padding:7px 11px;background:#0f172a;border:1px solid #1e293b;border-radius:6px;color:#94a3b8}.metric strong{color:#cbd5e1;font-weight:500;margin-left:8px}
+    #feed{overflow:auto;flex:1;padding:8px 36px 26px;scroll-behavior:smooth}.empty{border:1px dashed #334155;border-radius:12px;padding:28px;margin-top:12px}.empty h2{color:#e2e8f0;font-size:15px;margin:0 0 9px}.empty p{font-size:13px;color:#94a3b8;max-width:500px;line-height:1.7}.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}.suggestions button{background:#0f172a;color:#94a3b8}
+    .message{margin:19px 0}.message-label{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#64748b;margin-bottom:9px}.message.user .message-label{color:#60a5fa}.message.agent .message-label{color:#34d399}.message-body{white-space:pre-wrap;font-size:13px;line-height:1.8;overflow-wrap:anywhere}.message.error{padding:14px;border:1px solid #7f1d1d;border-radius:8px;color:#fda4af;background:#4c051925}
+    .terminal,.approval{margin:16px 0;border:1px solid #273449;border-radius:10px;overflow:hidden;background:#080f1f}.terminal summary{padding:13px 15px;cursor:pointer;font-size:12px;color:#94a3b8;background:#0f172a;overflow-wrap:anywhere}.terminal summary code{color:#67e8f9;margin-left:8px}.badge{float:right;font:10px ui-monospace,monospace;color:#94a3b8}.terminal pre{margin:0;padding:14px 16px;max-height:280px;overflow:auto;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}.stderr{color:#fda4af}.terminal .result-note{padding:0 16px 12px;font-size:11px;color:#fbbf24}
+    .approval{border-color:#665329;background:#211c102e;padding:18px}.approval-title{color:#fcd34d;font-size:12px;font-weight:600}.approval code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.7 ui-monospace,monospace;background:#020617;padding:13px;border-radius:7px;margin:14px 0;color:#f1f5f9}.approval p{font-size:12px;color:#94a3b8;line-height:1.7}.approval-actions{display:flex;gap:8px}.approve{background:#064e3b;border-color:#059669;color:#6ee7b7}.reject{background:#4c0519;border-color:#9f1239;color:#fda4af}.resolved{opacity:.7}
+    footer{padding:12px 36px 23px;border-top:1px solid #172033;background:#050c1d}#thinking{height:23px;font-size:11px;color:#6ee7b7}.composer{display:flex;gap:10px;border:1px solid #334155;border-radius:10px;padding:10px;background:#0f172a}.composer:focus-within{border-color:#3f766d}textarea{resize:none;flex:1;min-width:0;background:transparent;color:#e2e8f0;border:0;outline:0;font-size:13px;line-height:1.6;padding:4px}#send{align-self:flex-end;background:#34d399;color:#022c22;font-weight:700;border:0;padding:10px 16px}.footnote{display:flex;justify-content:space-between;margin-top:9px;gap:15px;font-size:10px;color:#64748b}
+    :focus-visible{outline:2px solid #34d399;outline-offset:3px}
+    @media(max-width:900px){.shell{grid-template-columns:1fr}aside{display:none}header{padding:18px 20px}.intro{padding:24px 20px 16px}#feed{padding:8px 20px 20px}footer{padding:12px 20px 18px}.auth input{width:150px}}
+    @media(max-width:570px){header{flex-wrap:wrap}.auth{width:100%}.auth input{flex:1;min-width:0}.main{height:100dvh}.intro h1{font-size:23px}.metrics{margin-top:15px}.footnote span:last-child{display:none}}
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-300">
+<div class="shell">
+  <aside>
+    <div class="brand"><span>▧</span> sentinel<span>.</span></div>
+    <div class="eyebrow" style="margin-top:9px">Server operations</div>
+    <div class="navitem">⌘ &nbsp; Agent console</div>
+    <div class="side-note"><div class="eyebrow">Execution policy</div><p><b>● Read-only</b><br>Runs automatically</p><p><b>◈ Server changes</b><br>Your approval required</p><p><b>⊘ Catastrophic operations</b><br>Always blocked</p></div>
+    <div class="side-note" style="margin-top:60px"><div class="eyebrow">Private infrastructure</div><p>Self-hosted execution.<br>Output is shared with your configured LLM provider.</p></div>
+  </aside>
+  <main class="main">
+    <header>
+      <div><div class="eyebrow">Workspace / Ubuntu</div><div style="font-size:13px;margin-top:5px;color:#e2e8f0">System administration</div></div>
+      <form id="auth-form" class="auth">
+        <label for="token" class="sr-only" style="position:absolute;left:-10000px">Access token</label>
+        <input id="token" type="password" placeholder="Enter access token" autocomplete="off" spellcheck="false" aria-label="Access token">
+        <button id="connect" type="submit">Connect</button>
+        <div id="connection" class="status" role="status"><span class="dot"></span><span id="connection-text">Offline</span></div>
+      </form>
+    </header>
+    <section class="intro">
+      <div class="eyebrow">Your infrastructure, in conversation</div>
+      <h1>A clearer view of your server.</h1>
+      <p class="subtitle">Inspect, diagnose, and take action. You stay in control.</p>
+      <div class="metrics"><div class="metric">POLICY<strong>Guardrails active</strong></div><div class="metric">TIMEOUT<strong>120 seconds</strong></div><div class="metric">MODEL<strong id="model">Not connected</strong></div></div>
+    </section>
+    <section id="feed" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
+      <div class="empty" id="empty"><h2>What would you like to investigate?</h2><p>Connect with your access token, then ask a question about this server. Commands and their results appear here as they run.</p><div class="suggestions"><button type="button" data-prompt="Check memory and disk usage, and summarize any concerns.">Memory &amp; disk usage ↗</button><button type="button" data-prompt="Show failed systemd services and help diagnose them.">Failed services ↗</button><button type="button" data-prompt="Show listening network ports and explain what is running.">Listening ports ↗</button></div></div>
+    </section>
+    <footer>
+      <div id="thinking" role="status"></div>
+      <form id="chat-form" class="composer"><textarea id="prompt" rows="2" maxlength="8000" placeholder="Ask about your server…" aria-label="Message" disabled></textarea><button id="send" type="submit" disabled>Send ↑</button></form>
+      <div class="footnote"><span>Review each change before approving. Never share secrets in prompts.</span><span>Enter to send · Shift + Enter for a new line</span></div>
+    </footer>
+  </main>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let socket = null, connected = false, busy = false, activeTerminal = null;
+const approvals = new Map();
+function el(tag, cls, text) { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; }
+function scrollFeed() { $('feed').scrollTop = $('feed').scrollHeight; }
+function append(node) { $('empty')?.remove(); $('feed').append(node); while ($('feed').children.length > 180) { const first = $('feed').firstElementChild; if (first.querySelector('button:not(:disabled)')) break; first.remove(); } scrollFeed(); }
+function message(kind, text) { const box = el('article', `message ${kind}`); box.append(el('div','message-label',kind === 'user' ? 'You' : kind === 'error' ? 'Notice' : 'Sentinel')); box.append(el('div','message-body',text)); append(box); }
+function updateControls() { $('prompt').disabled = !connected || busy; $('send').disabled = !connected || busy; $('connect').textContent = connected ? 'Disconnect' : socket ? 'Cancel' : 'Connect'; $('token').disabled = !!socket; }
+function finishTurn() { busy = false; $('thinking').textContent = ''; updateControls(); if(connected) $('prompt').focus(); }
+function resolveApproval(id, approved, label) { const card = approvals.get(id); if (!card) return; card.buttons.forEach(b => b.disabled = true); clearInterval(card.timer); card.status.textContent = label || (approved ? 'Approved · queued for execution' : 'Rejected or expired · command stopped'); card.box.classList.add('resolved'); approvals.delete(id); }
+function disconnectState() { connected = false; busy = false; $('connection').classList.remove('online'); $('connection-text').textContent = 'Offline'; $('model').textContent = 'Not connected'; $('thinking').textContent = ''; for (const id of [...approvals.keys()]) resolveApproval(id, false, 'Connection closed · approval cancelled'); if(activeTerminal) { activeTerminal.badge.textContent = 'connection lost'; activeTerminal = null; } updateControls(); }
+function terminal(command) { const box = el('details','terminal'); box.open = true; const head = el('summary'); const badge = el('span','badge','running'); head.append(badge,el('span','','BASH'),el('code','',command)); const out = el('pre'), err = el('pre','stderr'), note = el('div','result-note'); box.append(head,out,err,note); append(box); return {box,out,err,badge,note,command}; }
+function approval(event) { const box = el('article','approval'), status = el('div','approval-title','◈ Approval required'); box.append(status,el('p','',event.reason || 'This operation can change the server.'),el('code','',event.command)); const actions = el('div','approval-actions'), yes = el('button','approve','Approve command'), no = el('button','reject','Reject'); yes.type = no.type = 'button'; const buttons = [yes,no]; actions.append(yes,no); box.append(actions); const deadline = Date.now() + (event.expires_in || 180)*1000; const timer = setInterval(() => {const seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000)); status.textContent=`◈ Approval required · ${seconds}s remaining`; if (!seconds) resolveApproval(event.id,false,'Approval expired · command stopped');},1000); approvals.set(event.id,{box,status,buttons,timer}); const decide = approved => {if(!connected || socket?.readyState !== WebSocket.OPEN) return; buttons.forEach(b=>b.disabled=true); status.textContent='Sending decision…'; socket.send(JSON.stringify({action:'approval_decision',id:event.id,approved}));}; yes.onclick=()=>decide(true); no.onclick=()=>decide(false); append(box); }
+function handle(event) {
+  switch(event.type) {
+    case 'authenticated': connected=true; $('token').value=''; $('connection').classList.add('online'); $('connection-text').textContent='Live'; $('model').textContent=event.model; updateControls(); $('prompt').focus(); break;
+    case 'thinking': busy=true; $('thinking').textContent=event.status; updateControls(); break;
+    case 'command_executing': $('thinking').textContent='Executing command…'; activeTerminal=terminal(event.command); break;
+    case 'command_output_chunk': if(activeTerminal && activeTerminal.command===event.command) { const target=event.stream==='stderr'?activeTerminal.err:activeTerminal.out; target.append(document.createTextNode(event.data)); target.scrollTop=target.scrollHeight; scrollFeed(); } break;
+    case 'command_output': { const t=activeTerminal?.command===event.command?activeTerminal:terminal(event.command); t.out.textContent=event.stdout; t.err.textContent=event.stderr; t.badge.textContent=`exit ${event.exit_code}`; t.badge.style.color=event.exit_code===0?'#6ee7b7':'#fda4af'; t.note.textContent=[event.timed_out?'Stopped at execution timeout.':'',event.truncated?'Output truncated at 64 KiB per stream.':''].filter(Boolean).join(' '); activeTerminal=null; scrollFeed(); break; }
+    case 'ask_approval': $('thinking').textContent='Waiting for your approval…'; approval(event); break;
+    case 'approval_resolved': resolveApproval(event.id,event.approved); break;
+    case 'command_blocked': { const box=el('article','approval'); box.append(el('div','approval-title','⊘ Command stopped'),el('code','',event.command),el('p','',event.reason)); append(box); break; }
+    case 'agent_response': message('agent',event.content); break;
+    case 'error': message('error',event.message); break;
+    case 'turn_complete': finishTurn(); break;
+  }
+}
+$('auth-form').addEventListener('submit',event=>{event.preventDefault(); if(socket){socket.close(1000,'User disconnected');return;} const token=$('token').value.trim(); if(!token){$('token').focus();return;} const ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`); socket=ws; $('connection-text').textContent='Connecting'; updateControls(); ws.onopen=()=>{if(socket===ws)ws.send(JSON.stringify({action:'authenticate',token}));}; ws.onmessage=e=>{if(socket!==ws)return;try{handle(JSON.parse(e.data));}catch{message('error','Received an invalid server event.');}}; ws.onerror=()=>{}; ws.onclose=e=>{if(socket!==ws)return; socket=null;disconnectState(); if(e.code!==1000)message('error',e.code===1008?'Authentication, origin validation, or rate limit failed. Check your token and server configuration.':'Connection closed. Any running command or pending approval was cancelled. Reconnect to begin a new session.');};});
+$('chat-form').addEventListener('submit',event=>{event.preventDefault();const text=$('prompt').value.trim();if(!text||!connected||busy||socket.readyState!==WebSocket.OPEN)return;message('user',text);socket.send(JSON.stringify({action:'chat',text}));$('prompt').value='';busy=true;updateControls();$('thinking').textContent='Sending request…';});
+$('prompt').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();$('chat-form').requestSubmit();}});
+document.querySelectorAll('[data-prompt]').forEach(button=>button.onclick=()=>{if(!connected){$('token').focus();return;}$('prompt').value=button.dataset.prompt;$('prompt').focus();});
+window.addEventListener('pagehide',()=>socket?.close());
+</script>
+</body>
+</html>

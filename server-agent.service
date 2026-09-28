@@ -1,0 +1,47 @@
+[Unit]
+Description=Sentinel Ubuntu AI SysAdmin Agent
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=server-agent
+Group=server-agent
+WorkingDirectory=/opt/server-agent
+EnvironmentFile=/etc/server-agent.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=AGENT_WORK_DIR=/var/lib/server-agent
+ExecStart=/opt/server-agent/.venv/bin/python /opt/server-agent/main.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=control-group
+StateDirectory=server-agent
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+TasksMax=64
+MemoryMax=512M
+CPUQuota=100%
+ReadWritePaths=/var/lib/server-agent
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=server-agent
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,3 @@
+-r requirements.txt
+# Explicit test dependency (newer OpenAI SDKs can use httpx2 instead).
+httpx>=0.28.1
