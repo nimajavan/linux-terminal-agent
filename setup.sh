@@ -17,7 +17,7 @@ TARGET="$(cd -- "$TARGET" && pwd -P)"
 if [[ -n "$(find "$TARGET" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
   echo "Target must be empty: $TARGET" >&2; exit 1
 fi
-mkdir -p -- "$TARGET/static" "$TARGET/tests"
+mkdir -p -- "$TARGET/static" "$TARGET/tests" "$TARGET/docs"
 cat > "$TARGET/requirements.txt" <<'SENTINEL_FILE_0_END'
 # Python 3.14-aware minimums; no uvicorn[standard] or native event loop extras.
 fastapi>=0.119.0
@@ -34,6 +34,7 @@ httpx>=0.28.1
 SENTINEL_FILE_1_END
 cat > "$TARGET/.env" <<'SENTINEL_FILE_2_END'
 # setup.sh generates a fresh token. Replace this before a manual launch.
+# For local Ollama configuration, see .env.ollama.example and docs/OLLAMA.fa.md.
 AGENT_WEB_TOKEN=CHANGE_ME_TO_A_RANDOM_TOKEN_OF_AT_LEAST_32_CHARACTERS
 LLM_API_KEY=CHANGE_ME
 LLM_BASE_URL=https://api.openai.com/v1
@@ -44,7 +45,21 @@ SERVER_PORT=8000
 # ALLOWED_ORIGINS=https://agent.example.com
 # AGENT_WORK_DIR=/var/lib/server-agent
 SENTINEL_FILE_2_END
-cat > "$TARGET/main.py" <<'SENTINEL_FILE_3_END'
+cat > "$TARGET/.env.ollama.example" <<'SENTINEL_FILE_3_END'
+# For a manual installation, copy to .env and generate AGENT_WEB_TOKEN.
+# setup.sh already generates a token: preserve it and edit only the LLM fields.
+AGENT_WEB_TOKEN=CHANGE_ME_TO_A_RANDOM_TOKEN_OF_AT_LEAST_32_CHARACTERS
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen3-coder:30b
+SERVER_HOST=127.0.0.1
+SERVER_PORT=8000
+# The model must be installed in Ollama and support tool calling.
+# For Windows Ollama + Ubuntu WSL, see docs/OLLAMA.fa.md.
+# ALLOWED_ORIGINS=https://agent.example.com
+# AGENT_WORK_DIR=/var/lib/server-agent
+SENTINEL_FILE_3_END
+cat > "$TARGET/main.py" <<'SENTINEL_FILE_4_END'
 """Ubuntu system administration assistant. Run with Python 3.14+ on Linux.
 
 The command policy is deliberately a restricted language, not a Bash sandbox.
@@ -620,8 +635,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     config = Settings.from_env()
     uvicorn.run(create_app(config), host=config.host, port=config.port, loop="asyncio", http="h11", ws="websockets-sansio", ws_max_size=MAX_FRAME, ws_max_queue=8, proxy_headers=False)
-SENTINEL_FILE_3_END
-cat > "$TARGET/static/index.html" <<'SENTINEL_FILE_4_END'
+SENTINEL_FILE_4_END
+cat > "$TARGET/static/index.html" <<'SENTINEL_FILE_5_END'
 <!doctype html>
 <html lang="en">
 <head>
@@ -731,8 +746,8 @@ window.addEventListener('pagehide',()=>socket?.close());
 </script>
 </body>
 </html>
-SENTINEL_FILE_4_END
-cat > "$TARGET/server-agent.service" <<'SENTINEL_FILE_5_END'
+SENTINEL_FILE_5_END
+cat > "$TARGET/server-agent.service" <<'SENTINEL_FILE_6_END'
 [Unit]
 Description=Sentinel Ubuntu AI SysAdmin Agent
 After=network-online.target
@@ -780,8 +795,8 @@ SyslogIdentifier=server-agent
 
 [Install]
 WantedBy=multi-user.target
-SENTINEL_FILE_5_END
-cat > "$TARGET/README.md" <<'SENTINEL_FILE_6_END'
+SENTINEL_FILE_6_END
+cat > "$TARGET/README.md" <<'SENTINEL_FILE_7_END'
 # Sentinel — Ubuntu AI SysAdmin Agent
 
 A self-hosted FastAPI service and responsive dark dashboard. The LLM proposes
@@ -827,12 +842,39 @@ are a browser defense; the secret token is still required on every connection.
 
 ## LLM provider
 
+For Windows Ollama with Ubuntu WSL, see the [Persian setup and troubleshooting
+guide](docs/OLLAMA.fa.md). A safe configuration template is included in
+`.env.ollama.example`; it contains no real credentials or private host addresses.
+
 - OpenAI: `LLM_BASE_URL=https://api.openai.com/v1`; use an enabled tool-capable model.
 - DeepSeek: set its OpenAI-compatible base URL and a tool-capable model in `.env`.
 - Ollama: `LLM_BASE_URL=http://127.0.0.1:11434/v1`, `LLM_API_KEY=ollama`, and an
   installed model that supports tool calling.
 - Other compatible endpoints must support Chat Completions, `tools`, `tool_choice`
   and `max_tokens`. Provider compatibility depends on the selected model.
+
+For example, if `qwen3-coder:30b` is already installed, change only these entries
+in your active environment file and preserve your generated dashboard token:
+
+```dotenv
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen3-coder:30b
+```
+
+The `/v1` suffix is required for Ollama's OpenAI-compatible API. `127.0.0.1`
+refers to the machine/network environment running the backend, not the browser.
+Windows Ollama is reachable through that address from WSL in mirrored networking
+mode; it is not normally reachable through WSL's loopback in NAT mode. Verify
+the endpoint from Ubuntu with `curl --max-time 10 http://127.0.0.1:11434/v1/models`.
+Choose a locally installed model with tool support that fits your hardware.
+
+If startup reports an invalid `AGENT_WEB_TOKEN`, fix the `.env` beside the
+`main.py` you are actually running. A separate checkout or installer output has
+its own environment file. The systemd deployment instead uses
+`/etc/server-agent.env`. Ollama's dummy API key does not replace the dashboard
+token; both settings are required. See the Persian guide for a token repair
+command that preserves a valid existing token.
 
 Provider keys remain on the backend. Tokens stay in page memory, are cleared from
 the input after connection, and are never put in URLs or localStorage. Chat history
@@ -972,8 +1014,166 @@ Compatibility references:
 Tailwind is loaded via CDN as requested. The dashboard also includes its core CSS
 so its layout remains usable offline. For a stricter deployment, vendor your CSS
 and JavaScript and tighten the CSP instead of relying on an external CDN script.
-SENTINEL_FILE_6_END
-cat > "$TARGET/tests/test_agent.py" <<'SENTINEL_FILE_7_END'
+SENTINEL_FILE_7_END
+cat > "$TARGET/docs/OLLAMA.fa.md" <<'SENTINEL_FILE_8_END'
+# اجرای Agent در Ubuntu WSL با Ollama ویندوز
+
+Agent فرمان‌ها را داخل Ubuntu اجرا می‌کند؛ Ollama ویندوز فقط مدل را اجرا می‌کند.
+برای استفاده از مدل محلی به کلید OpenAI نیاز نیست.
+
+## ۱. مدل نصب‌شده را بررسی کن
+
+در PowerShell ویندوز:
+
+```powershell
+ollama list
+ollama show qwen3-coder:30b
+```
+
+مدل انتخابی باید قابلیت `tools` داشته باشد و در حافظه سیستم جا شود.
+`qwen3-coder:30b` یک نمونه است؛ در صورت انتخاب مدل دیگر، نام دقیق آن را در
+`LLM_MODEL` قرار بده. اگر فرمان `ollama` در PATH نیست، مسیر معمول نصب ویندوز:
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" list
+```
+
+## ۲. فایل تنظیمات همان نصب را ویرایش کن
+
+وارد پوشه‌ای شو که `main.py` را از آن اجرا می‌کنی، مثلاً:
+
+```bash
+cd "$HOME/server-agent"
+nano .env
+```
+
+این سه مقدار را تنظیم کن و مقدار معتبر `AGENT_WEB_TOKEN` را نگه دار:
+
+```dotenv
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen3-coder:30b
+```
+
+`ollama` مقدار جایگزین کلید API محلی است؛ توکن ورود داشبورد تنظیم جداگانه‌ای است.
+پسوند `/v1` را حذف نکن. آدرس با `/api` یا `/v1/chat/completions` جایگزین نشود؛
+برنامه مسیر درخواست را خودش به آدرس پایه اضافه می‌کند.
+
+اگر پروژه را در چند مسیر نصب کرده‌ای، هر مسیر فایل `.env` خودش را دارد.
+برای نمونه، فایل نسخه روی `/mnt/c/...` تنظیمات `/root/server-agent` را تغییر نمی‌دهد.
+سرویس systemd تنظیمات را از `/etc/server-agent.env` می‌خواند.
+
+## ۳. خطای توکن را رفع کن
+
+اگر خطای زیر دیده می‌شود:
+
+```text
+Set AGENT_WEB_TOKEN to a random secret of at least 32 characters.
+```
+
+در پوشه همان نصب این فرمان را اجرا کن. فقط توکن غایب، کوتاه یا placeholder
+جایگزین می‌شود؛ توکن معتبر فعلی و تنظیمات دیگر حفظ می‌شوند:
+
+```bash
+.venv/bin/python - <<'PY'
+from pathlib import Path
+import secrets
+from dotenv import dotenv_values, set_key
+
+path = Path('.env')
+if not path.is_file():
+    raise SystemExit('First create .env from .env.ollama.example and configure it.')
+token = dotenv_values(path).get('AGENT_WEB_TOKEN') or ''
+if len(token) < 32 or token.startswith('CHANGE_ME'):
+    set_key(str(path), 'AGENT_WEB_TOKEN', secrets.token_urlsafe(48), quote_mode='never')
+    print('Dashboard token generated; value kept in .env.')
+else:
+    print('Existing valid token preserved.')
+path.chmod(0o600)
+PY
+```
+
+برای دیدن توکن روی ترمینال خودت:
+
+```bash
+grep '^AGENT_WEB_TOKEN=' .env
+```
+
+فقط مقدار بعد از `=` را در Access token داشبورد وارد کن. آن را در چت، issue یا
+مخزن منتشر نکن. اگر مقدار قدیمی را در shell با `export` تنظیم کرده‌ای، پیش از
+اجرای دستی برنامه `unset AGENT_WEB_TOKEN` بزن تا مقدار فایل خوانده شود.
+
+## ۴. اتصال WSL به Ollama را بررسی کن
+
+Ollama ویندوز را باز نگه دار. داخل Ubuntu:
+
+```bash
+curl --max-time 10 http://127.0.0.1:11434/v1/models
+```
+
+اگر فهرست مدل‌ها برمی‌گردد، اتصال برقرار است و نیازی به تغییر شبکه نیست.
+اگر WSL در حالت NAT است، localhost لینوکس معمولاً به Ollama ویندوز وصل نمی‌شود.
+
+در Windows 11 22H2 یا جدیدتر با WSL به‌روز، می‌توان از mirrored networking استفاده کرد.
+فایل `%USERPROFILE%\.wslconfig` را در ویندوز باز کن و این تنظیم را در بخش
+`[wsl2]` اضافه یا اصلاح کن؛ سایر تنظیمات موجود را حفظ کن:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+```
+
+پس از ذخیره کارهای باز، در PowerShell اجرا کن. `wsl --shutdown` همه پردازش‌های
+در حال اجرای WSL را متوقف می‌کند:
+
+```powershell
+wsl --shutdown
+wsl -d Ubuntu-26.04
+```
+
+اگر نام توزیعت متفاوت است، نام صحیح را از `wsl --list --verbose` بگیر.
+سپس تست `curl` را داخل Ubuntu تکرار کن. لازم نیست برای این روش Ollama را
+روی همه آدرس‌های شبکه با `0.0.0.0` منتشر کنی یا فایروال را غیرفعال کنی.
+
+اگر از قبل یک آدرس خصوصی قابل‌دسترسی برای Ollama داری، همان میزبان را با
+پسوند `/v1` استفاده کن؛ آدرس IP هر سیستم متفاوت است. دسترسی به این endpoint
+باید به محیط مورد اعتماد محدود باشد، چون مقدار `LLM_API_KEY=ollama` احراز هویت
+واقعی ایجاد نمی‌کند.
+
+## ۵. اجرا
+
+داخل پوشه نصب:
+
+```bash
+.venv/bin/python main.py
+```
+
+در مرورگر ویندوز `http://127.0.0.1:8000` را باز کن، توکن را وارد کن و Connect بزن.
+برای تست بپرس: «میزان مصرف RAM این Ubuntu را بررسی کن.»
+
+اگر از systemd استفاده می‌کنی، سه تنظیم مدل را در فایل فعال سرویس قرار بده:
+
+```bash
+sudo nano /etc/server-agent.env
+sudo systemctl restart server-agent
+sudo journalctl -u server-agent -n 50 --no-pager
+```
+
+فهرست‌شدن مدل‌ها فقط دسترسی API را تأیید می‌کند؛ اجرای درخواست در داشبورد،
+تست واقعی پاسخ مدل و tool calling است. بارگذاری اولیه مدل بزرگ ممکن است از
+مهلت درخواست بیشتر طول بکشد؛ می‌توان مدل را ابتدا در Ollama بارگذاری کرد یا
+یک مدل کوچک‌تر دارای ابزار انتخاب کرد.
+
+برای اجرای دائمی از سرویس با کاربر محدود مطابق README استفاده کن. تأیید در
+داشبورد دسترسی root ایجاد نمی‌کند.
+
+## منابع
+
+- [رابط سازگار Ollama با OpenAI](https://docs.ollama.com/api/openai-compatibility)
+- [قابلیت فراخوانی ابزار در Ollama](https://docs.ollama.com/capabilities/tool-calling)
+- [شبکه WSL و حالت mirrored](https://learn.microsoft.com/en-us/windows/wsl/networking)
+SENTINEL_FILE_8_END
+cat > "$TARGET/tests/test_agent.py" <<'SENTINEL_FILE_9_END'
 import asyncio
 from pathlib import Path
 import json
@@ -1242,10 +1442,10 @@ class RunnerTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-SENTINEL_FILE_7_END
-cat > "$TARGET/tests/__init__.py" <<'SENTINEL_FILE_8_END'
+SENTINEL_FILE_9_END
+cat > "$TARGET/tests/__init__.py" <<'SENTINEL_FILE_10_END'
 
-SENTINEL_FILE_8_END
+SENTINEL_FILE_10_END
 
 "$PYTHON" - "$TARGET/.env" <<'PY_TOKEN'
 from pathlib import Path

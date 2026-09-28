@@ -43,12 +43,39 @@ are a browser defense; the secret token is still required on every connection.
 
 ## LLM provider
 
+For Windows Ollama with Ubuntu WSL, see the [Persian setup and troubleshooting
+guide](docs/OLLAMA.fa.md). A safe configuration template is included in
+`.env.ollama.example`; it contains no real credentials or private host addresses.
+
 - OpenAI: `LLM_BASE_URL=https://api.openai.com/v1`; use an enabled tool-capable model.
 - DeepSeek: set its OpenAI-compatible base URL and a tool-capable model in `.env`.
 - Ollama: `LLM_BASE_URL=http://127.0.0.1:11434/v1`, `LLM_API_KEY=ollama`, and an
   installed model that supports tool calling.
 - Other compatible endpoints must support Chat Completions, `tools`, `tool_choice`
   and `max_tokens`. Provider compatibility depends on the selected model.
+
+For example, if `qwen3-coder:30b` is already installed, change only these entries
+in your active environment file and preserve your generated dashboard token:
+
+```dotenv
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://127.0.0.1:11434/v1
+LLM_MODEL=qwen3-coder:30b
+```
+
+The `/v1` suffix is required for Ollama's OpenAI-compatible API. `127.0.0.1`
+refers to the machine/network environment running the backend, not the browser.
+Windows Ollama is reachable through that address from WSL in mirrored networking
+mode; it is not normally reachable through WSL's loopback in NAT mode. Verify
+the endpoint from Ubuntu with `curl --max-time 10 http://127.0.0.1:11434/v1/models`.
+Choose a locally installed model with tool support that fits your hardware.
+
+If startup reports an invalid `AGENT_WEB_TOKEN`, fix the `.env` beside the
+`main.py` you are actually running. A separate checkout or installer output has
+its own environment file. The systemd deployment instead uses
+`/etc/server-agent.env`. Ollama's dummy API key does not replace the dashboard
+token; both settings are required. See the Persian guide for a token repair
+command that preserves a valid existing token.
 
 Provider keys remain on the backend. Tokens stay in page memory, are cleared from
 the input after connection, and are never put in URLs or localStorage. Chat history

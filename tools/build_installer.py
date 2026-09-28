@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["requirements.txt", "requirements-dev.txt", ".env.example", "main.py", "static/index.html", "server-agent.service", "README.md", "tests/test_agent.py", "tests/__init__.py"]
+FILES = ["requirements.txt", "requirements-dev.txt", ".env.example", ".env.ollama.example", "main.py", "static/index.html", "server-agent.service", "README.md", "docs/OLLAMA.fa.md", "tests/test_agent.py", "tests/__init__.py"]
 HEADER = r'''#!/usr/bin/env bash
 # Standalone installer: no repository checkout or Node tooling required.
 set -euo pipefail
@@ -22,7 +22,7 @@ TARGET="$(cd -- "$TARGET" && pwd -P)"
 if [[ -n "$(find "$TARGET" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
   echo "Target must be empty: $TARGET" >&2; exit 1
 fi
-mkdir -p -- "$TARGET/static" "$TARGET/tests"
+mkdir -p -- "$TARGET/static" "$TARGET/tests" "$TARGET/docs"
 '''
 FOOTER = r'''
 "$PYTHON" - "$TARGET/.env" <<'PY_TOKEN'
