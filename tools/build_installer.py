@@ -44,9 +44,9 @@ echo
 printf 'Project created at: %s\n' "$TARGET"
 printf '1. Edit %s/.env and set LLM_API_KEY, LLM_BASE_URL, and LLM_MODEL.\n' "$TARGET"
 printf '2. Copy AGENT_WEB_TOKEN from that file into the dashboard.\n'
-printf '3. Start: cd %q && .venv/bin/python main.py\n' "$TARGET"
+printf '3. Start: cd %q && sudo .venv/bin/python main.py\n' "$TARGET"
 printf '4. Open http://127.0.0.1:8000 (or use the SSH tunnel in README.md).\n'
-printf '5. Optional tests: install requirements-dev.txt, then run .venv/bin/python -m unittest discover -v\n'
+printf '5. Optional tests: install requirements-dev.txt, then run sudo .venv/bin/python -m unittest discover -v\n'
 printf 'For boot-time installation see %s/README.md. No service was enabled automatically.\n' "$TARGET"
 '''
 

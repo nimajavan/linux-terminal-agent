@@ -7,8 +7,8 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=server-agent
-Group=server-agent
+User=root
+Group=root
 WorkingDirectory=/opt/server-agent
 EnvironmentFile=/etc/server-agent.env
 Environment=PYTHONUNBUFFERED=1
@@ -22,23 +22,6 @@ KillMode=control-group
 StateDirectory=server-agent
 StateDirectoryMode=0700
 UMask=0077
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictSUIDSGID=true
-LockPersonality=true
-CapabilityBoundingSet=
-AmbientCapabilities=
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
-TasksMax=64
-MemoryMax=512M
-CPUQuota=100%
-ReadWritePaths=/var/lib/server-agent
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=server-agent

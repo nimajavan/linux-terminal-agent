@@ -1,7 +1,7 @@
-# Sentinel — Ubuntu AI SysAdmin Agent
+# Sentinel â€” Ubuntu AI SysAdmin Agent
 
 A self-hosted FastAPI service and responsive dark dashboard. The LLM proposes
-commands, the backend checks them, and the operator approves each mutation.
+commands, and the backend executes them directly as root without filtering or approval prompts.
 No Node.js build. Python 3.14+ on Linux is required for production execution.
 
 ## Start on Ubuntu
@@ -13,7 +13,7 @@ your Ubuntu release. The installer does not replace Ubuntu's system Python.
 bash setup.sh "$HOME/server-agent"
 cd "$HOME/server-agent"
 nano .env  # enter your provider key, base URL and model
-.venv/bin/python main.py
+sudo .venv/bin/python main.py
 ```
 
 Open http://127.0.0.1:8000 and paste `AGENT_WEB_TOKEN` from `.env` into the header.
@@ -83,47 +83,38 @@ is session-local and disappears on disconnect. Raw recent command output is sent
 to the configured LLM: self-hosted execution does not imply local inference.
 Do not ask the agent to read credentials or other sensitive files.
 
-## Command policy and limitations
+## Full root command execution
 
-Every command is checked before execution and checked again after waits. A strict
-literal-command grammar rejects shell operators, substitutions, globs, scripts,
-wrappers, sudo, interpreters, editors and unsupported executables. Commands such as
-`ls`, `cat`, `grep`, `systemctl status`, `free -m`, `uptime`, `ip a` and `ss -tulpn`
-run automatically. File mutations, socket termination, package changes, service
-changes, reboot/shutdown, signals and firewall operations require an exact-command
-approval. Unflagged package changes are blocked; use `-y` or `--dry-run`.
+Authenticated sessions execute arbitrary Bash as root, without a command
+allowlist, protected-path filters, hard blocks, or approval prompts. Pipelines,
+redirections, substitutions, scripts and installed programs are supported.
+The dashboard token therefore grants full root command execution on this host.
+The server must be started as root; it never silently falls back to an ordinary
+user. The supplied systemd unit uses `User=root` and `Group=root` and no longer
+applies filesystem, capability, device, network-family or resource restrictions.
 
-Hard blocks include root/protected-system-path deletion and privilege changes,
-filesystem formatting, raw disk tools and fork bombs. Shell composition like
-`ls | grep log` is intentionally unsupported: ask for separate tool calls.
-Unknown operations are blocked, never implicitly treated as read-only.
+Authentication, browser origin validation, connection handling, streaming,
+the 120-second command timeout, output bounds and per-turn budgets are unchanged.
+Commands are noninteractive: stdin is closed and there is no PTY. Interactive
+editors cannot be operated through this chat UI. Each call starts a fresh Bash
+process; use a single command containing `cd ... && ...` when needed. Detached
+descendants are cleaned up after execution; use systemd for persistent services.
+Normal OS constraints still apply (for example, missing programs or WSL features
+not supported by the underlying kernel).
 
-This policy is **defense in depth, not a sandbox or a guarantee for arbitrary
-Bash**. Approved package/service operations may run trusted system hooks; symlink
-races, existing server configuration, utility behavior and OS permissions still
-matter. Do not run as root or grant blanket sudo. Built-in file-read protection
-is limited and is not a general secret scanner. Audit commands may contain paths
-or arguments; keep service journals access-controlled.
-
-The systemd unit runs as `server-agent`, drops capabilities, prevents privilege
-escalation, makes the filesystem read-only except its state/private temporary
-directories, hides home directories, and limits memory/tasks/CPU. Consequently,
-privileged changes normally fail even after UI approval. Approval is permission
-to attempt a command, not a grant of OS privileges. Read access to some logs also
-requires separately reviewed permissions. If privileged operations are needed,
-have an administrator design a narrow privileged broker and adjust the service
-restrictions for those exact operations; this project does not install one.
-PrivateTmp means `/tmp` inside the service is not the host's normal `/tmp` view.
+Qwen3-Coder sometimes returns its tool protocol in plain text when it omits the
+opening `<tool_call>` tag. The backend normalizes a complete, trailing
+`run_bash_command` block into a structured tool call before execution. Existing
+structured calls take precedence; fenced examples and other models are not
+interpreted. Malformed blocks report an error instead of inventing a command.
 
 ## Install the boot-time service
 
 Run these commands as an administrator after configuring and testing the app.
 The following assumes a fresh `/opt/server-agent` deployment; do not overwrite
-an existing installation without a backup. Code and the venv must remain owned
-by root so the service cannot modify its own security policy.
+an existing installation without a backup. Code and the venv are installed with root ownership.
 
 ```bash
-sudo useradd --system --home-dir /var/lib/server-agent --shell /usr/sbin/nologin server-agent
 sudo install -d -m 0755 /opt/server-agent /opt/server-agent/static
 sudo install -m 0644 main.py requirements.txt /opt/server-agent/
 sudo install -m 0644 static/index.html /opt/server-agent/static/index.html
@@ -156,23 +147,19 @@ Then send the requested protocol messages:
 
 ```json
 {"action":"chat","text":"Check memory usage"}
-{"action":"approval_decision","id":"approval-id","approved":true}
 ```
 
 Server events: `thinking {status}`, `command_executing {command}`,
-`command_output {command, exit_code, stdout, stderr}`, `ask_approval {id, command}`,
-`command_blocked {command, reason}`, and `agent_response {content}`.
+`command_output {command, exit_code, stdout, stderr}`, and `agent_response {content}`.
 
 Additional events: `command_output_chunk {command, stream, data}` for streaming,
-`approval_resolved {id, approved}`, `error {message}`, and `turn_complete`.
-Approval cards include `reason` and `expires_in`; final outputs include
+`error {message}`, and `turn_complete`. Approval requests are no longer emitted;
+legacy `approval_decision` messages return an error. Final outputs include
 `timed_out` and `truncated`. Responses may contain Markdown; the dashboard renders
 all provider and command content as literal text for XSS safety.
 
 One request runs per socket, at most eight sockets are admitted, and execution
-is globally serialized. Approvals expire after 180 seconds, cannot be reused or
-resolved from another session, and are cancelled on disconnect. Rejections stop
-the turn rather than letting the model find a different way to perform the action.
+is globally serialized. Active execution is cancelled on disconnect.
 Each request has a ten-command/ten-round budget. Provider calls have a 60-second
 request timeout with one retry. Frames and per-session message rate are bounded.
 For Internet-facing deployments add proxy connection/authentication rate limits.
@@ -180,22 +167,24 @@ For Internet-facing deployments add proxy connection/authentication rate limits.
 Commands use null stdin and `DEBIAN_FRONTEND=noninteractive`, run for at most
 120 seconds, and stream up to 64 KiB per output stream while continuing to drain
 excess output. Timeouts/disconnects kill the process group and reap its leader.
-Trusted binaries are resolved from system directories. The generated, quoted argv
-is executed by a noninteractive Bash without loading profiles or `BASH_ENV`.
+The exact tool command is executed by noninteractive Bash without loading profiles
+or `BASH_ENV`. There is no command rewriting or executable-path allowlist.
 
 ## Verification and maintenance
 
 ```bash
 .venv/bin/python -m pip install --only-binary=:all: -r requirements-dev.txt
-.venv/bin/python -m unittest discover -v
+sudo .venv/bin/python -m unittest discover -v
 .venv/bin/python -m pip check
 bash -n setup.sh
 ```
 
-Tests cover policy bypass attempts, authentication/origin validation, approval
-isolation/replay/rejection/expiry, provider failure, streamed stdout/stderr, output
-floods, EOF stdin, environment isolation, timeouts and cancellation. They use a
-fake LLM; no paid API calls or mutating server commands are used.
+Tests cover authentication/origin validation, direct execution without approvals,
+Qwen tool-call normalization, provider failure, streamed stdout/stderr, output
+floods, EOF stdin, environment isolation, timeouts and cancellation. Root runner
+tests inspect identity and operate only on disposable temporary files; destructive
+command examples use mocks. Run the suite as root to include Linux runner tests.
+No paid API calls or actual destructive server commands are used.
 
 After editing canonical files, regenerate the self-contained installer with
 `python tools/build_installer.py`. Dependencies use flexible minimum versions;

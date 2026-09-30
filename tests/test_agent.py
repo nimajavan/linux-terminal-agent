@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 import json
 import os
-import signal
+import shlex
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -14,34 +14,6 @@ from openai.types.chat import ChatCompletionMessage
 from starlette.websockets import WebSocketDisconnect
 
 import main
-
-
-class PolicyTests(unittest.TestCase):
-    def test_read_only_examples(self):
-        for command in ["ls -la /tmp", "cat /etc/os-release", "grep error /var/log/example.log", "systemctl status nginx --no-pager", "free -m", "uptime", "ip a", "ip route show", "ss -tulpn", "journalctl -u nginx -n 100 --no-pager"]:
-            with self.subTest(command=command):
-                self.assertEqual(main.triage(command).level, "safe")
-
-    def test_mutations_require_approval(self):
-        for command in ["rm /tmp/example", "reboot", "shutdown -h now", "kill 1234", "systemctl stop nginx", "systemctl restart nginx", "apt remove -y nginx", "apt-get purge --yes nginx", "ufw --force enable", "iptables -F", "ss -K", "ss --kill"]:
-            with self.subTest(command=command):
-                self.assertEqual(main.triage(command).level, "approval")
-
-    def test_catastrophic_and_bypasses_blocked(self):
-        commands = ["rm -rf /", "rm -fr '/etc'", "/bin/rm -rf /tmp/..", "r'm' -rf /", "rm --no-preserve-root /", "rm --target-directory=/ tmp", "chmod -R 777 /", "chmod 777 /etc/passwd", "dd if=/dev/zero of=/dev/sda", "mkfs.ext4 /dev/sdb", ":(){ :|:& };:", "bash -c 'rm -rf /'", "sudo rm -rf /", "env rm -rf /", "python3 -c pass", "ls; reboot", "cat $(whoami)", "ls | cat", "ls > /tmp/out", "ls\nreboot", "ls &", "cat `id`", "rm /tmp/*", "ls \\x", "nano /tmp/x", "apt remove nginx", "apt-get -o APT::Update::Pre-Invoke=x update", "apt install -y ./evil.deb", "systemctl edit nginx", "journalctl --vacuum-time=1s", "ip link set lo down", "ip -batch /tmp/script", "ss --ki", "ss -D /tmp/out", "ss --diag=/tmp/out", "iptables -M /tmp/script -L", "cat /proc/self/environ"]
-        for command in commands:
-            with self.subTest(command=command):
-                self.assertEqual(main.triage(command).level, "blocked")
-
-    @unittest.skipUnless(sys.platform == "linux", "Linux path semantics")
-    def test_symlink_to_root_is_blocked(self):
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "root-link"
-            path.symlink_to("/", target_is_directory=True)
-            self.assertEqual(main.triage(f"rm -rf {path}").level, "blocked")
-
-    def test_secret_file_is_blocked(self):
-        self.assertEqual(main.triage(f"cat '{main.ROOT / '.env'}'").level, "blocked")
 
 
 def settings():
@@ -102,72 +74,66 @@ class WebSocketTests(unittest.TestCase):
             self.assertEqual(ws.receive_json()["content"], "Ready.")
             self.assertEqual(ws.receive_json()["type"], "turn_complete")
 
-    def test_reject_stops_without_execution(self):
-        with patch.object(main, "execute", new_callable=AsyncMock) as execute:
-            with TestClient(main.create_app(settings(), FakeProvider([tool("reboot")]))) as client, self.connect(client) as ws:
-                self.authenticate(ws)
-                ws.send_json({"action": "chat", "text": "Reboot"})
-                self.assertEqual(ws.receive_json()["type"], "thinking")
-                approval = ws.receive_json()
-                self.assertEqual(approval["type"], "ask_approval")
-                ws.send_json({"action": "approval_decision", "id": approval["id"], "approved": False})
-                self.assertFalse(ws.receive_json()["approved"])
-                self.assertEqual(ws.receive_json()["type"], "command_blocked")
-                self.assertEqual(ws.receive_json()["type"], "agent_response")
-                self.assertEqual(ws.receive_json()["type"], "turn_complete")
-            execute.assert_not_called()
-
-    def test_approve_runs_exact_command_once(self):
-        async def fake_execute(argv, command, cwd, emit):
-            result = {"type": "command_output", "command": command, "exit_code": 0, "stdout": "done", "stderr": ""}
-            await emit(result)
-            return result
-        provider = FakeProvider([tool("systemctl restart nginx"), {"role": "assistant", "content": "Restart completed."}])
-        with patch.object(main, "execute", side_effect=fake_execute) as execute:
-            with TestClient(main.create_app(settings(), provider)) as client, self.connect(client) as ws:
-                self.authenticate(ws)
-                ws.send_json({"action": "chat", "text": "Restart nginx"})
-                ws.receive_json()
-                approval = ws.receive_json()
-                ws.send_json({"action": "approval_decision", "id": approval["id"], "approved": True})
-                types = []
-                while True:
-                    event = ws.receive_json()
-                    types.append(event["type"])
-                    if event["type"] == "turn_complete":
-                        break
-                self.assertIn("command_output", types)
-                ws.send_json({"action": "approval_decision", "id": approval["id"], "approved": True})
-                self.assertEqual(ws.receive_json()["type"], "error")
-            self.assertEqual(execute.await_count, 1)
-            self.assertEqual(execute.call_args.args[0], ("systemctl", "restart", "nginx"))
-
-    def test_approval_is_session_scoped_and_disconnect_cancels(self):
-        with patch.object(main, "execute", new_callable=AsyncMock) as execute:
-            with TestClient(main.create_app(settings(), FakeProvider([tool("reboot")]))) as client:
-                with self.connect(client) as first, self.connect(client) as second:
-                    self.authenticate(first)
-                    self.authenticate(second)
-                    first.send_json({"action": "chat", "text": "reboot"})
-                    first.receive_json()
-                    approval = first.receive_json()
-                    second.send_json({"action": "approval_decision", "id": approval["id"], "approved": True})
-                    self.assertEqual(second.receive_json()["type"], "error")
-                execute.assert_not_called()
-
-    def test_hard_block_never_requests_approval(self):
-        with patch.object(main, "execute", new_callable=AsyncMock) as execute:
-            with TestClient(main.create_app(settings(), FakeProvider([tool("rm -rf /")]))) as client, self.connect(client) as ws:
-                self.authenticate(ws)
-                ws.send_json({"action": "chat", "text": "test"})
-                self.assertEqual(ws.receive_json()["type"], "thinking")
-                self.assertEqual(ws.receive_json()["type"], "command_blocked")
-                self.assertEqual(ws.receive_json()["type"], "agent_response")
-                self.assertEqual(ws.receive_json()["type"], "turn_complete")
-            execute.assert_not_called()
+    def test_commands_execute_without_approval_or_filtering(self):
+        # Destructive command strings are only passed to an AsyncMock.
+        for command in ["systemctl restart nginx", "rm -rf /", "python3 -c 'print(1)'", "printf hello | cat > /tmp/demo"]:
+            with self.subTest(command=command):
+                async def fake_execute(text, cwd, emit):
+                    result = {"type": "command_output", "command": text, "exit_code": 0, "stdout": "simulated", "stderr": ""}
+                    await emit(result)
+                    return result
+                provider = FakeProvider([tool(command), {"role": "assistant", "content": "Done."}])
+                with patch.object(main, "execute", side_effect=fake_execute) as execute:
+                    with TestClient(main.create_app(settings(), provider)) as client, self.connect(client) as ws:
+                        self.authenticate(ws)
+                        ws.send_json({"action": "chat", "text": "test request"})
+                        events = []
+                        while True:
+                            event = ws.receive_json()
+                            events.append(event["type"])
+                            if event["type"] == "turn_complete":
+                                break
+                        self.assertIn("command_output", events)
+                        self.assertNotIn("ask_approval", events)
+                        self.assertNotIn("command_blocked", events)
+                    execute.assert_awaited_once()
+                    self.assertEqual(execute.call_args.args[0], command)
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_qwen_text_call_is_executed_and_result_returned_to_model(self):
+        provider = FakeProvider([
+            {"role": "assistant", "content": "I'll check.\n<function=run_bash_command>\n<parameter=command>\nss -tuln\n</parameter>\n</function>\n</tool_call>"},
+            {"role": "assistant", "content": "Observed listening ports."},
+        ])
+        config = main.Settings("x" * 48, "dummy", "http://localhost:11434/v1", "qwen3-coder:30b")
+        ws = AsyncMock()
+        session = main.Session(ws, config, provider, asyncio.Lock())
+        with patch.object(main.Session, "run_command", new_callable=AsyncMock, return_value={"exit_code": 0, "stdout": "LISTEN 127.0.0.1:8000", "stderr": ""}) as execute:
+            await session.chat("Which ports are listening?")
+            execute.assert_awaited_once_with("ss -tuln")
+        messages = provider.requests[-1]["messages"]
+        self.assertEqual(messages[-1]["role"], "tool")
+        self.assertEqual(messages[-1]["tool_call_id"], messages[-2]["tool_calls"][0]["id"])
+        self.assertIn("LISTEN", messages[-1]["content"])
+        self.assertEqual(session.history[-1]["content"], "Observed listening ports.")
+
+    async def test_disconnect_cancels_active_execution(self):
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+        async def slow_execute(command, cwd, emit):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        session = main.Session(AsyncMock(), settings(), FakeProvider([tool("sleep 30")]), asyncio.Lock())
+        with patch.object(main, "execute", side_effect=slow_execute):
+            session.task = asyncio.create_task(session.chat("test"))
+            await asyncio.wait_for(started.wait(), 2)
+            await session.close()
+        self.assertTrue(cancelled.is_set())
+
     async def test_real_sdk_against_local_compatible_api(self):
         requests = []
 
@@ -194,12 +160,6 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(requests[0]["tools"][0]["function"]["name"], "run_bash_command")
         self.assertEqual(session.history[-1]["content"], "Local SDK request verified.")
 
-    async def test_approval_expires(self):
-        session = main.Session(AsyncMock(), settings(), None, asyncio.Lock())
-        with patch.object(main, "APPROVAL_TIMEOUT", 0.01):
-            self.assertFalse(await session.approve("reboot", "sensitive"))
-        self.assertFalse(session.pending)
-
     async def test_provider_error_does_not_expose_secret_or_corrupt_history(self):
         provider = FakeProvider([RuntimeError("secret-value")])
         ws = AsyncMock()
@@ -210,14 +170,28 @@ class SessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ws.send_json.call_args.args[0]["type"], "turn_complete")
 
 
-@unittest.skipUnless(sys.platform == "linux", "Linux execution tests")
+@unittest.skipUnless(sys.platform == "linux" and os.geteuid() == 0, "Linux root execution tests")
 class RunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_root_shell_supports_pipes_redirects_and_expansions(self):
+        events = []
+        async def emit(event):
+            events.append(event)
+        with tempfile.TemporaryDirectory() as folder:
+            result = await main.execute("printf '%s\\n' \"$(id -u)\" | cat > result.txt; cat result.txt", Path(folder), emit)
+            self.assertEqual(result["stdout"].strip(), "0")
+            self.assertEqual((Path(folder) / "result.txt").read_text().strip(), "0")
+            self.assertEqual(result["exit_code"], 0)
+
+    async def test_non_root_does_not_silently_claim_full_access(self):
+        with patch.object(os, "geteuid", return_value=1000):
+            with self.assertRaisesRegex(RuntimeError, "root"):
+                await main.execute("id -u", Path("/tmp"), AsyncMock())
+
     async def run_python(self, code, **kwargs):
         events = []
         async def emit(event):
             events.append(event)
-        # Test the runner directly, bypassing policy; Python remains forbidden to the agent.
-        result = await main.execute(("python3", "-c", code), "test fixture", Path(tempfile.gettempdir()), emit, **kwargs)
+        result = await main.execute(shlex.join(["python3", "-c", code]), Path(tempfile.gettempdir()), emit, **kwargs)
         return result, events
 
     async def test_streams_stderr_exit_and_eof(self):
@@ -255,13 +229,37 @@ class RunnerTests(unittest.IsolatedAsyncioTestCase):
             if event["type"] == "command_output_chunk":
                 pid = int(event["data"].strip())
                 started.set()
-        task = asyncio.create_task(main.execute(("python3", "-c", "import os,time; print(os.getpid(),flush=True); time.sleep(30)"), "fixture", Path("/tmp"), emit))
+        task = asyncio.create_task(main.execute(shlex.join(["python3", "-c", "import os,time; print(os.getpid(),flush=True); time.sleep(30)"]), Path("/tmp"), emit))
         await asyncio.wait_for(started.wait(), 5)
         task.cancel()
         with self.assertRaises(asyncio.CancelledError):
             await task
         with self.assertRaises(ProcessLookupError):
             os.kill(pid, 0)
+
+
+class ToolNormalizationTests(unittest.TestCase):
+    def test_structured_calls_take_precedence(self):
+        message = ChatCompletionMessage.model_validate(tool("uptime"))
+        self.assertIs(main.normalize_tool_message(message, "qwen3-coder:30b"), message)
+
+    def test_fenced_examples_and_other_models_remain_text(self):
+        for model, content in [
+            ("other-model", "<function=run_bash_command>"),
+            ("qwen3-coder:30b", "```xml\n<function=run_bash_command>\n```"),
+        ]:
+            message = ChatCompletionMessage(role="assistant", content=content)
+            self.assertIs(main.normalize_tool_message(message, model), message)
+
+    def test_malformed_or_multiple_calls_do_not_become_commands(self):
+        for content in [
+            "<function=run_bash_command><parameter=command>uptime",
+            "<function=other><parameter=command>uptime</parameter></function>",
+            "<function=run_bash_command><parameter=command></parameter></function>",
+            "<function=run_bash_command><parameter=command>uptime</parameter></function><function=run_bash_command><parameter=command>id</parameter></function>",
+        ]:
+            with self.subTest(content=content), self.assertRaises(ValueError):
+                main.normalize_tool_message(ChatCompletionMessage(role="assistant", content=content), "qwen3-coder:30b")
 
 
 if __name__ == "__main__":

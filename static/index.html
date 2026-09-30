@@ -40,7 +40,7 @@
     <div class="brand"><span>▧</span> sentinel<span>.</span></div>
     <div class="eyebrow" style="margin-top:9px">Server operations</div>
     <div class="navitem">⌘ &nbsp; Agent console</div>
-    <div class="side-note"><div class="eyebrow">Execution policy</div><p><b>● Read-only</b><br>Runs automatically</p><p><b>◈ Server changes</b><br>Your approval required</p><p><b>⊘ Catastrophic operations</b><br>Always blocked</p></div>
+    <div class="side-note"><div class="eyebrow">Execution mode</div><p><b>● Full root access</b><br>Commands run as root</p><p><b>◈ Server changes</b><br>Execute immediately</p><p><b>⌘ Bash commands</b><br>No command filtering</p></div>
     <div class="side-note" style="margin-top:60px"><div class="eyebrow">Private infrastructure</div><p>Self-hosted execution.<br>Output is shared with your configured LLM provider.</p></div>
   </aside>
   <main class="main">
@@ -57,7 +57,7 @@
       <div class="eyebrow">Your infrastructure, in conversation</div>
       <h1>A clearer view of your server.</h1>
       <p class="subtitle">Inspect, diagnose, and take action. You stay in control.</p>
-      <div class="metrics"><div class="metric">POLICY<strong>Guardrails active</strong></div><div class="metric">TIMEOUT<strong>120 seconds</strong></div><div class="metric">MODEL<strong id="model">Not connected</strong></div></div>
+      <div class="metrics"><div class="metric">ACCESS<strong>Full root</strong></div><div class="metric">TIMEOUT<strong>120 seconds</strong></div><div class="metric">MODEL<strong id="model">Not connected</strong></div></div>
     </section>
     <section id="feed" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
       <div class="empty" id="empty"><h2>What would you like to investigate?</h2><p>Connect with your access token, then ask a question about this server. Commands and their results appear here as they run.</p><div class="suggestions"><button type="button" data-prompt="Check memory and disk usage, and summarize any concerns.">Memory &amp; disk usage ↗</button><button type="button" data-prompt="Show failed systemd services and help diagnose them.">Failed services ↗</button><button type="button" data-prompt="Show listening network ports and explain what is running.">Listening ports ↗</button></div></div>
@@ -65,7 +65,7 @@
     <footer>
       <div id="thinking" role="status"></div>
       <form id="chat-form" class="composer"><textarea id="prompt" rows="2" maxlength="8000" placeholder="Ask about your server…" aria-label="Message" disabled></textarea><button id="send" type="submit" disabled>Send ↑</button></form>
-      <div class="footnote"><span>Review each change before approving. Never share secrets in prompts.</span><span>Enter to send · Shift + Enter for a new line</span></div>
+      <div class="footnote"><span>Commands execute immediately as root. Keep your access token private.</span><span>Enter to send · Shift + Enter for a new line</span></div>
     </footer>
   </main>
 </div>
