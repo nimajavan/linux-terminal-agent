@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["requirements.txt", "requirements-dev.txt", ".env.example", ".env.ollama.example", "main.py", "static/index.html", "server-agent.service", "README.md", "docs/OLLAMA.fa.md", "tests/test_agent.py", "tests/__init__.py"]
+FILES = ["requirements.txt", "requirements-dev.txt", ".env.example", ".env.ollama.example", "main.py", "static/index.html", "server-agent.service", "README.md", "docs/OLLAMA.fa.md", "docs/SETUP.fa.md", "tests/test_agent.py", "tests/__init__.py"]
 HEADER = r'''#!/usr/bin/env bash
 # Standalone installer: no repository checkout or Node tooling required.
 set -euo pipefail

@@ -46,6 +46,7 @@ are a browser defense; the secret token is still required on every connection.
 For Windows Ollama with Ubuntu WSL, see the [Persian setup and troubleshooting
 guide](docs/OLLAMA.fa.md). A safe configuration template is included in
 `.env.ollama.example`; it contains no real credentials or private host addresses.
+For complete installation instructions in Persian, see [راهنمای صفر تا صد راه‌اندازی](docs/SETUP.fa.md).
 
 - OpenAI: `LLM_BASE_URL=https://api.openai.com/v1`; use an enabled tool-capable model.
 - DeepSeek: set its OpenAI-compatible base URL and a tool-capable model in `.env`.
